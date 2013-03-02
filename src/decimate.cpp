@@ -97,55 +97,53 @@ void initDecimation(Mesh &mesh) {
     std::cout << "Finished init" << std::endl;
 }
 
-bool is_collapse_legal(Mesh &mesh, Mesh::HalfedgeHandle _hh) {
-	// collect vertices
-	Mesh::VertexHandle v0, v1;
-	v0 = mesh.from_vertex_handle(_hh);
-	v1 = mesh.to_vertex_handle(_hh);
+bool
+is_collapse_legal(Mesh &mesh, Mesh::HalfedgeHandle _hh)
+{
+  // collect vertices
+  Mesh::VertexHandle v0, v1;
+  v0 = mesh.from_vertex_handle(_hh);
+  v1 = mesh.to_vertex_handle(_hh);
 
-	// collect faces
-	Mesh::FaceHandle fl = mesh.face_handle(_hh);
-	Mesh::FaceHandle fr = mesh.face_handle(
-			mesh.opposite_halfedge_handle(_hh));
+  // collect faces
+  Mesh::FaceHandle fl = mesh.face_handle(_hh);
+  Mesh::FaceHandle fr = mesh.face_handle(mesh.opposite_halfedge_handle(_hh));
 
-	// backup point positions
-	Mesh::Point p0 = mesh.point(v0);
-	Mesh::Point p1 = mesh.point(v1);
+  // backup point positions
+  Mesh::Point p0 = mesh.point(v0);
+  Mesh::Point p1 = mesh.point(v1);
 
-	// topological test
-	if (!mesh.is_collapse_ok(_hh))
-		return false;
 
-	// test boundary stuff
-	if (mesh.is_boundary(v0) && !mesh.is_boundary(v1))
-		return false;
+  // topological test
+  if (!mesh.is_collapse_ok(_hh))
+    return false;
 
-    // Test for normal flipping
-    for(Mesh::VertexFaceIter vf_i = mesh.vf_iter(v0); vf_i; ++vf_i){
-        if(fl == mesh.face_handle(vf_i) || fr == mesh.face_handle(vf_i))
-            continue;
-        Mesh::Normal orig = mesh.normal(vf_i);
-        
-        Mesh::FaceVertexIter fv_it = mesh.fv_iter(vf_i);
-        Vec3f p1 = mesh.point(fv_it);
-        Vec3f p2 = mesh.point(++fv_it);
-        Vec3f p3 = mesh.point(++fv_it);
-        Mesh::Normal res;
+  // test boundary stuff
+  if (mesh.is_boundary(v0) && !mesh.is_boundary(v1))
+    return false;
 
-        if(p1 == mesh.point(v0))
-            p1 = mesh.point(v1);
-        else if(p2 == mesh.point(v0))
-            p2 = mesh.point(v0);
-        else
-            p3 = mesh.point(v0);
+  for (Mesh::VertexFaceIter vfIt = mesh.vf_iter(v0); vfIt; ++vfIt) {
+    if (vfIt.handle() == fl || vfIt.handle() == fr) continue;
 
-        res = (p2-p1) % (p3-p1);
-        if((orig | res) / (orig.length()*res.length()) < 1/sqrt(2.0))
-            return false;                           // Flipped triangle
-    }
+    Mesh::Point p[3];
 
-	// collapse passed all tests -> ok
-	return true;
+    Mesh::ConstFaceVertexIter cfvIt = mesh.cfv_iter(vfIt.handle());
+    p[0] = mesh.point(cfvIt.handle());
+    p[1] = mesh.point((++cfvIt).handle());
+    p[2] = mesh.point((++cfvIt).handle());
+
+    Mesh::Point q[3];
+
+    for (int i = 0; i < 3; i++)
+      q[i] = (p[i] == p0)? p1 : p[i];
+
+    Mesh::Point n1 = (p[1]-p[0])%(p[2]-p[0]);
+    Mesh::Point n2 = (q[1]-q[0])%(q[2]-q[0]);
+
+    if ((n1|n2) < n1.length()*n2.length()/sqrt(2.)) return false;
+  }
+
+  return true;
 }
 
 float priority(Mesh &mesh, Mesh::HalfedgeHandle _heh) {
