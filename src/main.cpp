@@ -29,26 +29,52 @@ bool showSurface = true, showAxes = true, showCurvature = false, showNormals = f
 float specular[] = { 1.0, 1.0, 1.0, 1.0 };
 float shininess[] = { 50.0 };
 
+bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
+                       Vec3f actualCamPos){
+  // TODO: interpolate kw between vertices and find where kw = 0
+  // if Dwkw >0 at that point, store in zero_x
+  // if such a point is found on two different edges, return true
+
+
+  return false;
+}
+
 void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position to account for panning etc.
-  glColor3f(.5,.5,.5);
-	
-  // RENDER SUGGESTIVE CONTOURS HERE ---------------------
-  for (Mesh::VertexIter v_it = mesh.vertices_begin(); v_it !=
-         mesh.vertices_end(); ++v_it) {
-    Vec3f v = camPos - mesh.point(v_it.handle());
-    CurvatureInfo c_info = mesh.property(curvature, v_it.handle());
-    Vector3d view(v[0], v[1], v[2]);
-    Vec3f t1 = c_info.directions[0];
-    Vector3d T1(t1[0], t1[1], t1[2]);
-    Vec3f t2 = c_info.directions[1];
-    Vector3d T2(t2[0], t2[1], t2[2]);
-    double sin = T1.dot(view);
-    double cos = T2.dot(view);
-    double kw = sin * sin * c_info.curvatures[0] + cos * cos *
-    curvatures[1];
+	glColor3f(.5,.5,.5);
+
+	// --------------ALGORITHM------------------
+	// for each face
+	//     interpolate kw  between each pair of vertices: v0->v1 v1->v2 v2->v0
+	//          if(kw == 0 AND Dwkw > 0 for any two pts along these edges)
+        //               connect these points
+	// NOTE:  Dwkw = viewCurvatureDerivative * w 
+	// QUESTION: what is w? do we interpolate it?
+        // -----------------------------------------
+
+        for(Mesh::FaceIter it = mesh.faces_begin(); it !=mesh.faces_end(); ++it){
+	  Mesh::ConstFaceVertexIter fvIt = mesh.cfv_iter(it);
+          Vec3f vertex[3];           // each vertex
+	  double kw[3];              // kw's of each vertex
+	  Vec3f zero_x[2];           // pts to connect on 2 diff edges of a triangle
+          bool zero_x_found = false; // whether 2 pts have been found
+
+          for(int i = 0; i < 3; i++){
+	    vertex[i] = mesh.point(fvIt.handle());
+            kw[i] = mesh.property(viewCurvature, fvIt.handle());
+            ++fvIt;
+	  }
+          
+          // Find points on different edges where kw = 0 & dwkw >0
+	  zero_x_found = FindZeroCrossings(vertex, kw, zero_x, actualCamPos);
     
-  }
-  // -----------------------------------------------------
+          // Connect these points
+          if(zero_x_found){
+	    glBegin(GL_LINES);
+	    glVertex3f(zero_x[0][0], zero_x[0][1], zero_x[0][2]);
+	    glVertex3f(zero_x[1][0], zero_x[1][0], zero_x[1][2]);
+	    glEnd();
+	  }
+	}
 }
 
 void drawTriangles()
