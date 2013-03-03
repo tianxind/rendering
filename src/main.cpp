@@ -31,9 +31,16 @@ float shininess[] = { 50.0 };
 
 void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position to account for panning etc.
 	glColor3f(.5,.5,.5);
-	
-	// RENDER SUGGESTIVE CONTOURS HERE -----------------------------------------------------------------------------
-	// -------------------------------------------------------------------------------------------------------------
+	// for each face
+	//     interpolate kw  between each pair of vertices: v0->v1 v1->v2
+	//        v2->v0
+	//          if(kw == 0 AND Dwkw > 0 for any
+	//              two points along these edges)
+        //               connect these points (it'll be between two edges
+        //              	of the triangle
+  
+
+	// Dwkw = viewCurvatureDerivative * w
 }
 
 void drawTriangles()
