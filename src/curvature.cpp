@@ -73,8 +73,7 @@ void computeViewCurvature(Mesh &mesh, OpenMesh::Vec3f camPos, OpenMesh::VPropHan
     Vector3d T2(t2[0], t2[1], t2[2]);
     double sin = T1.dot(view);
     double cos = T2.dot(view);
-    double kw = sin * sin * c_info.curvatures[0] + cos * cos *
-    curvatures[1];
+    double kw = sin * sin * c_info.curvatures[0] + cos * cos * c_info.curvatures[1];
     mesh.property(viewCurvature, v_it) = kw;
   }
   // -------------------------------------------------------------------------------------------------
