@@ -40,7 +40,8 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
         //              	of the triangle
   
 
-	// Dwkw = viewCurvatureDerivative * w
+	// Dwkw = viewCurvatureDerivative * w question: what is w? do we 
+        // interpolate it?
 }
 
 void drawTriangles()
