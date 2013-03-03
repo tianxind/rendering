@@ -30,10 +30,25 @@ float specular[] = { 1.0, 1.0, 1.0, 1.0 };
 float shininess[] = { 50.0 };
 
 void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position to account for panning etc.
-	glColor3f(.5,.5,.5);
+  glColor3f(.5,.5,.5);
 	
-	// RENDER SUGGESTIVE CONTOURS HERE -----------------------------------------------------------------------------
-	// -------------------------------------------------------------------------------------------------------------
+  // RENDER SUGGESTIVE CONTOURS HERE ---------------------
+  for (Mesh::VertexIter v_it = mesh.vertices_begin(); v_it !=
+         mesh.vertices_end(); ++v_it) {
+    Vec3f v = camPos - mesh.point(v_it.handle());
+    CurvatureInfo c_info = mesh.property(curvature, v_it.handle());
+    Vector3d view(v[0], v[1], v[2]);
+    Vec3f t1 = c_info.directions[0];
+    Vector3d T1(t1[0], t1[1], t1[2]);
+    Vec3f t2 = c_info.directions[1];
+    Vector3d T2(t2[0], t2[1], t2[2]);
+    double sin = T1.dot(view);
+    double cos = T2.dot(view);
+    double kw = sin * sin * c_info.curvatures[0] + cos * cos *
+    curvatures[1];
+    
+  }
+  // -----------------------------------------------------
 }
 
 void drawTriangles()
@@ -258,7 +273,7 @@ int main(int argc, char** argv) {
 	cout << '\t' << mesh.n_edges() << " edges.\n";
 	cout << '\t' << mesh.n_faces() << " faces.\n";
 	
-	simplify(mesh,.1f);
+	//simplify(mesh,.1f);
 	
 	mesh.update_normals();
 	
