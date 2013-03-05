@@ -29,13 +29,70 @@ bool showSurface = true, showAxes = true, showCurvature = false, showNormals = f
 float specular[] = { 1.0, 1.0, 1.0, 1.0 };
 float shininess[] = { 50.0 };
 
+/* Returns 1 if kw is postivie and -1 if kw is negative */
+int KwSign(double kw){
+  if(kw < 0) return -1;
+  else return 1;
+}
+
+/* If Zero crossing exists, stores pairs of vertices to 
+ * interpolate between in double* interp and returns true.
+ * Otherwise, returns false.
+ */
+bool ZeroCrossingExists(double* kw, size_t* interp){
+  size_t index = 0;
+  for(size_t i = 1; i < 3; ++i){
+    if(KwSign(kw[i]) != KwSign(kw[i-1])){
+      interp[index] = i-1;
+      interp[index+1] = i;
+      index += 2;
+    } 
+    if(index == 2) {
+      interp[index] = i;
+      interp[index+1] = 0;
+    }
+  }
+  return index != 0;
+}
+
+/* Returns Dwkw where gradient of kw is multiplied by
+ * w interpolated at the centroid of the face
+ */
+double ComputeDirectionalGradient(Mesh::FaceIter f_It, Vec3f* vertex,
+                                  Vec3f camPos){
+  Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
+  Vec3f centroid = vertex[0]; 
+  for(int i = 1; i < 3; ++i){
+    centroid += vertex[i];
+  }
+  centroid /= 3;
+  Vec3f v = camPos - centroid;
+  Vec3f n = mesh.normal(f_It.handle());
+  Vec3f w = v - n*(n|v);
+  
+  return kw_gradient | w;
+}
+
+/* Interpolates the point coordinates where kw = 0 */
+Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
+  double t = -1*kw[i1] / (kw[i2]-kw[i1]);
+  return vertex[i1]*(1-t) + vertex[i2]*t;
+}
+
+/* Finds Zero Crossing and stores their coordinates in Vec3f* zero_x */
 bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
-                       Vec3f actualCamPos){
-  // TODO: interpolate kw between vertices and find where kw = 0
-  // if Dwkw >0 at that point, store in zero_x
-  // if such a point is found on two different edges, return true
-
-
+                       Mesh::FaceIter f_It, Vec3f actualCamPos){
+  size_t interp[4];                  // pairs of vertex indices
+  if(ZeroCrossingExists(kw, interp)){
+    double dwkw = ComputeDirectionalGradient(f_It, vertex, actualCamPos);
+    if(dwkw > 0){
+      Vec3f p1 = InterpZeroCrossingPt(vertex, kw, interp[0], interp[1]);
+      Vec3f p2 = InterpZeroCrossingPt(vertex, kw, interp[2], interp[3]);
+      zero_x[0] = p1;
+      zero_x[1] = p2;
+      return true;
+    }
+  } 
   return false;
 }
 
@@ -65,15 +122,15 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
     }
           
     // Find points on different edges where kw = 0 & dwkw >0
-    zero_x_found = FindZeroCrossings(vertex, kw, zero_x, actualCamPos);
+    zero_x_found = FindZeroCrossings(vertex, kw, zero_x, it, actualCamPos);
     
     // Connect these points
-    if(zero_x_found){
+    /* if(zero_x_found){
       glBegin(GL_LINES);
       glVertex3f(zero_x[0][0], zero_x[0][1], zero_x[0][2]);
       glVertex3f(zero_x[1][0], zero_x[1][0], zero_x[1][2]);
       glEnd();
-    }
+      }*/
   }
 }
 
@@ -135,7 +192,7 @@ void renderMesh() {
 	glDepthRange(0,0.999);
 	
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
-	renderSuggestiveContours(actualCamPos);
+	//	renderSuggestiveContours(actualCamPos);
 	
 	// We'll be nice and provide you with code to render feature edges below
 	glBegin(GL_LINES);
