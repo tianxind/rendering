@@ -14,6 +14,9 @@ using namespace std;
 using namespace OpenMesh;
 using namespace Eigen;
 
+const double TD_THRESH = .02;
+const double THETAD_THRESH = M_PI/4;
+
 VPropHandleT<double> viewCurvature;
 FPropHandleT<Vec3f> viewCurvatureDerivative;
 VPropHandleT<CurvatureInfo> curvature;
@@ -52,37 +55,45 @@ bool ZeroCrossingExists(double* kw, size_t* interp){
     interp[index] = 2;
     interp[index+1] = 0;
   }
+
   return index != 0;
 }
 
-/* Returns Dwkw where gradient of kw is multiplied by
- * w interpolated at the centroid of the face
+/* Interpolates the point coordinates where kw = 0 */
+Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
+  double t = (-1 * kw[i1]) / (kw[i2] - kw[i1]);
+  return vertex[i1] * (1-t) + vertex[i2] * t;
+}
+
+/* Returns true if the given face contains a valid inflection point.
+ * That is, Dwkw > 0, Dwkw/||w|| > td threshold, and 
+ * arccos(dot(n,v)/||v||) > theta_d threshold
  */
-double ComputeDirectionalGradient(Mesh::FaceIter f_It, Vec3f* vertex,
-                                  Vec3f camPos){
+bool IsValidInflectionPoint(Mesh::FaceIter f_It, Vec3f* vertex, Vec3f camPos){
   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
   Vec3f centroid = (vertex[0] + vertex[1] + vertex[2]) / 3; 
 
   Vec3f v = camPos - centroid;
   Vec3f n = mesh.normal(f_It.handle());
   Vec3f w = v - n*(n|v);
-  
-  return kw_gradient|w;
+
+  Vector3d V(v[0], v[1], v[2]);
+  Vector3d W(w[0], w[1], w[2]);
+
+  double theta_d = acos((n|v)/V.norm());
+  double dwkw = kw_gradient|w;
+  double td = dwkw/W.norm();
+ 
+  return  (dwkw > 0 && td > TD_THRESH && theta_d > THETAD_THRESH);
 }
 
-/* Interpolates the point coordinates where kw = 0 */
-Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
-  double t = -1 * kw[i1] / (kw[i2]-kw[i1]);
-  return vertex[i1]*(1-t) + vertex[i2]*t;
-}
 
-/* Finds Zero Crossing and stores their coordinates in Vec3f* zero_x */
+/* Finds Zero Crossing and stores their coordinates in zero_x */
 bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
                        Mesh::FaceIter f_It, Vec3f actualCamPos){
   size_t interp[4];                  // stores pairs of vertex indices
   if(ZeroCrossingExists(kw, interp)){
-    double dwkw = ComputeDirectionalGradient(f_It, vertex, actualCamPos);
-    if(dwkw > 0){
+    if(IsValidInflectionPoint(f_It, vertex, actualCamPos)){
       Vec3f p1 = InterpZeroCrossingPt(vertex, kw, interp[0], interp[1]);
       Vec3f p2 = InterpZeroCrossingPt(vertex, kw, interp[2], interp[3]);
       zero_x[0] = p1;
@@ -373,7 +384,7 @@ int main(int argc, char** argv) {
 	cout << '\t' << mesh.n_edges() << " edges.\n";
 	cout << '\t' << mesh.n_faces() << " faces.\n";
 	
-	//simplify(mesh,.1f);
+	//	simplify(mesh,.1f);
 	
 	mesh.update_normals();
 	
