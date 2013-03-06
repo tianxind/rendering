@@ -61,8 +61,7 @@ bool ZeroCrossingExists(double* kw, size_t* interp){
 double ComputeDirectionalGradient(Mesh::FaceIter f_It, Vec3f* vertex,
                                   Vec3f camPos){
   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
-  Vec3f centroid = vertex[0] + vertex[1] + vertex[2]; 
-  centroid /= 3;
+  Vec3f centroid = (vertex[0] + vertex[1] + vertex[2]) / 3; 
 
   Vec3f v = camPos - centroid;
   Vec3f n = mesh.normal(f_It.handle());
