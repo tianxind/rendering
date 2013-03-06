@@ -40,7 +40,7 @@ bool isSharpEdge(Mesh &mesh, const Mesh::EdgeHandle &e) {
   Vec3f n1 = mesh.normal(fh_1);
   Vector3d normal1(n1[0], n1[1], n1[2]); 
   return normal0.dot(normal1) < 1/2;
-  // ------------------------------------------------
+  // -------------------------------------------------
 }
 
 bool isFeatureEdge(Mesh &mesh, const Mesh::EdgeHandle &e, Vec3f cameraPos) {

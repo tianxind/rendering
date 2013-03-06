@@ -47,10 +47,10 @@ bool ZeroCrossingExists(double* kw, size_t* interp){
       interp[index+1] = i;
       index += 2;
     } 
-    if(index == 2) {
-      interp[index] = i;
-      interp[index+1] = 0;
-    }
+  }
+  if(index == 2) {
+    interp[index] = 2;
+    interp[index+1] = 0;
   }
   return index != 0;
 }
@@ -61,16 +61,20 @@ bool ZeroCrossingExists(double* kw, size_t* interp){
 double ComputeDirectionalGradient(Mesh::FaceIter f_It, Vec3f* vertex,
                                   Vec3f camPos){
   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
-  Vec3f centroid = vertex[0]; 
-  for(int i = 1; i < 3; ++i){
-    centroid += vertex[i];
-  }
+  Vec3f centroid = vertex[0] + vertex[1] + vertex[2]; 
   centroid /= 3;
+  Vector3d KW(kw_gradient[0], kw_gradient[1], kw_gradient[2]);
+
   Vec3f v = camPos - centroid;
+  v.normalize();
   Vec3f n = mesh.normal(f_It.handle());
-  Vec3f w = v - n*(n|v);
+  n.normalize();
+  Vector3d N(n[0], n[1], n[2]);
+  Vector3d V(v[0], v[1], v[2]);
+
+  Vector3d w = V - N*(N.dot(V));
   
-  return kw_gradient | w;
+  return KW.dot(w);
 }
 
 /* Interpolates the point coordinates where kw = 0 */
@@ -82,7 +86,7 @@ Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
 /* Finds Zero Crossing and stores their coordinates in Vec3f* zero_x */
 bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
                        Mesh::FaceIter f_It, Vec3f actualCamPos){
-  size_t interp[4];                  // pairs of vertex indices
+  size_t interp[4];                  // stores pairs of vertex indices
   if(ZeroCrossingExists(kw, interp)){
     double dwkw = ComputeDirectionalGradient(f_It, vertex, actualCamPos);
     if(dwkw > 0){
@@ -123,14 +127,15 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
           
     // Find points on different edges where kw = 0 & dwkw >0
     zero_x_found = FindZeroCrossings(vertex, kw, zero_x, it, actualCamPos);
-    
+    Vec3f pt1 = zero_x[0];
+    Vec3f pt2 = zero_x[1];
     // Connect these points
-    /* if(zero_x_found){
+    if(zero_x_found){
       glBegin(GL_LINES);
-      glVertex3f(zero_x[0][0], zero_x[0][1], zero_x[0][2]);
-      glVertex3f(zero_x[1][0], zero_x[1][0], zero_x[1][2]);
+      glVertex3f(pt1[0], pt1[1], pt1[2]);
+      glVertex3f(pt2[0], pt2[1], pt2[2]);
       glEnd();
-      }*/
+     }
   }
 }
 
@@ -192,7 +197,7 @@ void renderMesh() {
 	glDepthRange(0,0.999);
 	
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
-	//	renderSuggestiveContours(actualCamPos);
+		renderSuggestiveContours(actualCamPos);
 	
 	// We'll be nice and provide you with code to render feature edges below
 	glBegin(GL_LINES);
@@ -209,9 +214,27 @@ void renderMesh() {
 		}
 	glEnd();
 	
-	if (showCurvature) {
-		// WRITE CODE HERE TO RENDER THE PRINCIPAL DIRECTIONS YOU COMPUTED ---------------------------------------------
-		// -------------------------------------------------------------------------------------------------------------
+		if (showCurvature) {
+		glBegin(GL_LINES);
+		glColor3f(0,1,0);
+		for (Mesh::ConstVertexIter it = mesh.vertices_begin(); it != mesh.vertices_end(); ++it) {
+			CurvatureInfo info = mesh.property(curvature, it.handle());
+			Vec3f p = mesh.point(it.handle());
+			Vec3f e1 = info.directions[0];
+			Vec3f e2 = info.directions[1];
+			
+			float vecLen = .01f;
+			Vec3f d1Forward = p + e1 * vecLen;
+			Vec3f d1Back = p - e1 * vecLen;
+			glVertex3f(d1Forward[0], d1Forward[1], d1Forward[2]);
+			glVertex3f(d1Back[0], d1Back[1], d1Back[2]);
+		
+			Vec3f d2Forward = p + e2 * vecLen;
+			Vec3f d2Back = p - e2 * vecLen;
+			glVertex3f(d2Forward[0], d2Forward[1], d2Forward[2]);
+			glVertex3f(d2Back[0], d2Back[1], d2Back[2]);
+		}
+		glEnd();
 	}
 	
 	if (showNormals) {
