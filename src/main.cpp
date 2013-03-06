@@ -63,23 +63,17 @@ double ComputeDirectionalGradient(Mesh::FaceIter f_It, Vec3f* vertex,
   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
   Vec3f centroid = vertex[0] + vertex[1] + vertex[2]; 
   centroid /= 3;
-  Vector3d KW(kw_gradient[0], kw_gradient[1], kw_gradient[2]);
 
   Vec3f v = camPos - centroid;
-  v.normalize();
   Vec3f n = mesh.normal(f_It.handle());
-  n.normalize();
-  Vector3d N(n[0], n[1], n[2]);
-  Vector3d V(v[0], v[1], v[2]);
-
-  Vector3d w = V - N*(N.dot(V));
+  Vec3f w = v - n*(n|v);
   
-  return KW.dot(w);
+  return kw_gradient|w;
 }
 
 /* Interpolates the point coordinates where kw = 0 */
 Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
-  double t = -1*kw[i1] / (kw[i2]-kw[i1]);
+  double t = -1 * kw[i1] / (kw[i2]-kw[i1]);
   return vertex[i1]*(1-t) + vertex[i2]*t;
 }
 
@@ -129,6 +123,7 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
     zero_x_found = FindZeroCrossings(vertex, kw, zero_x, it, actualCamPos);
     Vec3f pt1 = zero_x[0];
     Vec3f pt2 = zero_x[1];
+
     // Connect these points
     if(zero_x_found){
       glBegin(GL_LINES);
@@ -215,9 +210,9 @@ void renderMesh() {
 	glEnd();
 	
 		if (showCurvature) {
-		glBegin(GL_LINES);
-		glColor3f(0,1,0);
-		for (Mesh::ConstVertexIter it = mesh.vertices_begin(); it != mesh.vertices_end(); ++it) {
+		  glBegin(GL_LINES);
+		  glColor3f(0,1,0);
+		  for (Mesh::ConstVertexIter it = mesh.vertices_begin(); it != mesh.vertices_end(); ++it) {
 			CurvatureInfo info = mesh.property(curvature, it.handle());
 			Vec3f p = mesh.point(it.handle());
 			Vec3f e1 = info.directions[0];
@@ -233,9 +228,9 @@ void renderMesh() {
 			Vec3f d2Back = p - e2 * vecLen;
 			glVertex3f(d2Forward[0], d2Forward[1], d2Forward[2]);
 			glVertex3f(d2Back[0], d2Back[1], d2Back[2]);
+		  }
+		  glEnd();
 		}
-		glEnd();
-	}
 	
 	if (showNormals) {
 		glBegin(GL_LINES);
