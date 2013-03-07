@@ -44,18 +44,13 @@ int KwSign(double kw){
  */
 bool ZeroCrossingExists(double* kw, size_t* interp){
   size_t index = 0;
-  for(size_t i = 1; i < 3; ++i){
-    if(KwSign(kw[i]) != KwSign(kw[i-1])){
-      interp[index] = i-1;
-      interp[index+1] = i;
+  for(size_t i = 1; i <= 3; ++i){
+    if(KwSign(kw[i%3]) != KwSign(kw[(i -1)%3])){
+      interp[index] = (i-1)%3;
+      interp[index+1] = i%3;
       index += 2;
     } 
   }
-  if(index == 2) {
-    interp[index] = 2;
-    interp[index+1] = 0;
-  }
-
   return index != 0;
 }
 
