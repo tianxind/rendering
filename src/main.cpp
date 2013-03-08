@@ -15,7 +15,7 @@ using namespace OpenMesh;
 using namespace Eigen;
 
 const double TD_THRESH = .02;
-const double THETAD_THRESH = M_PI/4;
+const double THETAD_THRESH = M_PI/6;
 
 VPropHandleT<double> viewCurvature;
 FPropHandleT<Vec3f> viewCurvatureDerivative;
@@ -45,7 +45,11 @@ int KwSign(double kw){
 bool ZeroCrossingExists(double* kw, size_t* interp){
   size_t index = 0;
   for(size_t i = 1; i <= 3; ++i){
-    if(KwSign(kw[i%3]) != KwSign(kw[(i -1)%3])){
+    // double kw1 = abs(kw[i%3]);
+    // double kw2 = abs(kw[(i-1)%3]);
+    // double kw1 = kw[2];
+    //  double kw2 = kw[0];
+    if(KwSign(kw[i%3]) != KwSign(kw[(i-1)%3])){
       interp[index] = (i-1)%3;
       interp[index+1] = i%3;
       index += 2;
@@ -64,33 +68,42 @@ Vec3f InterpZeroCrossingPt(Vec3f* vertex, double* kw, int i1, int i2){
  * That is, Dwkw > 0, Dwkw/||w|| > td threshold, and 
  * arccos(dot(n,v)/||v||) > theta_d threshold
  */
-bool IsValidInflectionPoint(Mesh::FaceIter f_It, Vec3f* vertex, Vec3f camPos){
+bool IsValidInflectionPoint(Mesh::FaceIter f_It, Vec3f* vertex, Vec3f pt1,
+			    Vec3f pt2, Vec3f camPos){
   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
   Vec3f centroid = (vertex[0] + vertex[1] + vertex[2]) / 3; 
 
-  Vec3f v = camPos - centroid;
+  Vec3f v1 = camPos - pt1;
+  Vec3f v2 = camPos - pt2;
   Vec3f n = mesh.normal(f_It.handle());
-  Vec3f w = v - n*(n|v);
+  //Vec3f w = v - n*(n|v);
 
-  Vector3d V(v[0], v[1], v[2]);
-  Vector3d W(w[0], w[1], w[2]);
+  Vector3d V1(v1[0], v1[1], v1[2]);
+  Vector3d V2(v2[0], v2[1], v2[2]);
+  //Vector3d W(w[0], w[1], w[2]); //dot product of kw_gradient with v
 
-  double theta_d = acos((n|v)/V.norm());
-  double dwkw = kw_gradient|w;
-  double td = dwkw/W.norm();
+  double theta_d1 = acos((n|v1)/V1.norm());
+  double theta_d2 = acos((n|v2)/V2.norm());
+  double dwkw1 = kw_gradient|v1;
+  double dwkw2 = kw_gradient|v2;
  
-  return  (dwkw > 0 && td > TD_THRESH && theta_d > THETAD_THRESH);
+  return  (dwkw1 > TD_THRESH && dwkw2 > TD_THRESH && theta_d1 > THETAD_THRESH && theta_d2 >THETAD_THRESH);
 }
 
+bool IsValidInflectionPointNew(Mesh::FaceIter f_It, double t1, double t2,
+			       size_t* interp, Vec3f camPos){
+   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
+   
+}
 
 /* Finds Zero Crossing and stores their coordinates in zero_x */
 bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
                        Mesh::FaceIter f_It, Vec3f actualCamPos){
   size_t interp[4];                  // stores pairs of vertex indices
   if(ZeroCrossingExists(kw, interp)){
-    if(IsValidInflectionPoint(f_It, vertex, actualCamPos)){
-      Vec3f p1 = InterpZeroCrossingPt(vertex, kw, interp[0], interp[1]);
-      Vec3f p2 = InterpZeroCrossingPt(vertex, kw, interp[2], interp[3]);
+     Vec3f p1 = InterpZeroCrossingPt(vertex, kw, interp[0], interp[1]);
+     Vec3f p2 = InterpZeroCrossingPt(vertex, kw, interp[2], interp[3]);
+    if(IsValidInflectionPoint(f_It, vertex, p1, p2,  actualCamPos)){
       zero_x[0] = p1;
       zero_x[1] = p2;
       return true;
@@ -125,6 +138,7 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
     }
           
     // Find points on different edges where kw = 0 & dwkw >0
+    //  if(abs(kw[0]) > .02 && abs(kw[1]) > .02 && abs(kw[2]) > .02){
     zero_x_found = FindZeroCrossings(vertex, kw, zero_x, it, actualCamPos);
     Vec3f pt1 = zero_x[0];
     Vec3f pt2 = zero_x[1];
@@ -136,6 +150,7 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
       glVertex3f(pt2[0], pt2[1], pt2[2]);
       glEnd();
      }
+    //  }
   }
 }
 
@@ -194,7 +209,7 @@ void renderMesh() {
 	if (!showSurface) glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 	
 	glDisable(GL_LIGHTING);
-	glDepthRange(0,0.999);
+	glDepthRange(0,0.98);
 	
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
 		renderSuggestiveContours(actualCamPos);
@@ -273,7 +288,7 @@ void display() {
 	glViewport(0,0,windowWidth,windowHeight);
 	
 	float ratio = (float)windowWidth / (float)windowHeight;
-	gluPerspective(50, ratio, .01, 10); // 50 degree vertical viewing angle, zNear = 1, zFar = 1000
+	gluPerspective(50, ratio, .6, 100); // 50 degree vertical viewing angle, zNear = 1, zFar = 1000
 	
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
