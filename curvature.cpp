@@ -44,7 +44,7 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 		// Find the two eigenvectors
 		EigenSolver<Matrix3d> solver(M_i);
 		CurvatureInfo info;
-		for (int i=0, j=0; i<3; ++i) {
+		/*for (int i=0, j=0; i<3; ++i) {
 			double eig = real(solver.eigenvalues()(i));
 			if (abs(eig) > 1e-6) {
 				info.curvatures[j] = eig;
@@ -52,7 +52,15 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 				info.directions[j] = Vec3f(v[0], v[1],v[2]);
 				info.dir[j++] = Vector3f(v[0], v[1], v[2]);
 			}
-		}
+		}*/
+
+		Vector3d vvv(0,1,0);
+		Vector3d curvDir = -N_i.cross(vvv);
+		info.directions[0] = Vec3f(curvDir[0], curvDir[1], curvDir[2]);
+		info.directions[1] = Vec3f(curvDir[0], curvDir[1], curvDir[2]);
+		info.dir[0] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);
+		info.dir[1] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);
+
 		info.pos = Vector3f(v_i[0], v_i[1], v_i[2]);
 		mesh.property(curvature, v_it) = info;
 	}

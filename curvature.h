@@ -48,15 +48,15 @@ inline void ComputeBarycentricSLERP(CurvatureInfo & a, CurvatureInfo & b,
 	float u,v,w;
 	ComputeBarycentricCoords(pt, a.pos, b.pos, c.pos, u, v, w);
 
-	//result.pos = u*a.pos + v*b.pos + w*c.pos;
-	/*result.dir[0] = (u*a.dir[0] + v*b.dir[0] + w*c.dir[0]).normalized();
-	result.dir[1] = (u*a.dir[1] + v*b.dir[1] + w*c.dir[1]).normalized();*/
+	result.pos = u*a.pos + v*b.pos + w*c.pos;
+	result.dir[0] = (u*a.dir[0] + v*b.dir[0] + w*c.dir[0]).normalized();
+	result.dir[1] = (u*a.dir[1] + v*b.dir[1] + w*c.dir[1]).normalized();
 
 
-	CurvatureInfo tmp0, tmp1;
+	/*CurvatureInfo tmp0, tmp1;
 	a.ComputeSLERP(b, u+v, tmp0);
 	a.ComputeSLERP(c, u+v, tmp1);
-	tmp0.ComputeSLERP(tmp1, v/(u+v), result);
+	tmp0.ComputeSLERP(tmp1, v/(u+v), result);*/
 }
 
 
