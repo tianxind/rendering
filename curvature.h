@@ -7,10 +7,11 @@ using Eigen::Vector3f;
 
 struct CurvatureInfo {
 	OpenMesh::Vec3f directions[2];
-
+    
 	// The position of curvature information need to lie on a vertex
 	Eigen::Vector3f pos;
 	Eigen::Vector3f dir[2];
+        Eigen::Matrix3d m;
 	double curvatures[2];
 
 	void ComputeSLERP(CurvatureInfo & v1, float t, CurvatureInfo & result)

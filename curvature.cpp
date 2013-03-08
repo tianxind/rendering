@@ -40,10 +40,11 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 		}
 		// Normalize M_i
 		M_i /= sumWeight_i;
-
+		
 		// Find the two eigenvectors
 		EigenSolver<Matrix3d> solver(M_i);
 		CurvatureInfo info;
+                info.m = M_i;
 		for (int i=0, j=0; i<3; ++i) {
 			double eig = real(solver.eigenvalues()(i));
 			if (abs(eig) > 1e-6) {
