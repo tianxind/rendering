@@ -32,26 +32,6 @@ struct CurvatureInfo {
 void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvature);
 void computeViewCurvature(Mesh &mesh, OpenMesh::Vec3f camPos, OpenMesh::VPropHandleT<CurvatureInfo> &curvature, OpenMesh::VPropHandleT<double> &viewCurvature, OpenMesh::FPropHandleT<OpenMesh::Vec3f> &viewCurvatureDerivative);
 
-void InterpolateVertexCurvatures(Vector3f &pt, CurvatureInfo &info1, 
-                                 CurvatureInfo &info2, CurvatureInfo &info3, 
-                                 Vector3f &a, Vector3f &b){
-  float u, v, w;
-  ComputeBarycentricCoords(pt, info1.pos, info2.pos, info3.pos, u, v, w);
-  Eigen::Matrix3d matrix_wsum = u*info1.m + v*info2.m + w*info3.m;
-  
-  // Find two non-zero eigenvectors
-  EigenSolver<Matrix3d> solver(matrix_wsum);
-  Vector3f eigenvectors[2];
-  for(int i = 0, j = 0; i < 3; ++i){
-    double eig = real(solver.eigenvalues()(i));
-    if(abs(eig) > 1e-6){
-      Vector3f v = solver.pseudoEigenvectors().block(0, i, 3, 1);
-      eigenvectors[j++] = v;
-    }
-  }
-  a = eigenvectors[0];
-  b = eigenvectors[1];
-}
 inline void ComputeBarycentricCoords(Vector3f & pt, Vector3f & a, Vector3f & b, Vector3f & c, float & u, float & v, float & w)
 {
 	// Real Time Collision Detection
