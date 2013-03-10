@@ -53,7 +53,13 @@ void StreamLines::ComputeStreamLines(Mesh & _mesh, VPropHandleT<CurvatureInfo> &
 	m_NumFacesVisited = 0;
 	int numStreamLines = 0;
 	//while (m_NumFacesVisited != m_pMesh->n_faces()) {
-		for (Mesh::FaceIter f_it = m_pMesh->faces_begin(), end = m_pMesh->faces_end(); f_it != end; ++f_it) {
+	int counter = 0;
+
+	Mesh::FaceIter f_it = m_pMesh->faces_begin();
+	//for (int i=0; i<400; i++) ++f_it;
+
+	for (Mesh::FaceIter end = m_pMesh->faces_end(); f_it != end; ++f_it) {
+			if (counter++ > 3) break;
 			Mesh::FaceHandle f_h = f_it.handle();
 			if (m_pMesh->property(faceData, f_h).bVisited) {
 				continue;
@@ -63,7 +69,7 @@ void StreamLines::ComputeStreamLines(Mesh & _mesh, VPropHandleT<CurvatureInfo> &
 			m_StreamLines.push_back(StreamLine());
 			if (!ComputeStreamLineGroup(f_h, numStreamLines++))
 				m_StreamLines.pop_back();
-			break;
+			//break;
 		}
 	//}
 }
@@ -72,6 +78,7 @@ bool StreamLines::ComputeStreamLineGroup(Mesh::FaceHandle & f_h, int streamLineI
 {	
 	Vector3f centroid;
 	m_pMesh->calc_face_centroid(f_h, VCAST(centroid));
+	centroid.y() += .01f;
 
 	OBBoxEx obb;
 	CurvatureInfo newCurv;
@@ -82,7 +89,7 @@ bool StreamLines::ComputeStreamLineGroup(Mesh::FaceHandle & f_h, int streamLineI
 		
 		bool r = 0;
 		r |= IntegrateAlongDirectionField(seeds, 1.f, streamLineIdx); //consider dir when looking into orthogonal streamlines
-		//r |= IntegrateAlongDirectionField(seeds, -1.f, streamLineIdx);
+		r |= IntegrateAlongDirectionField(seeds, -1.f, streamLineIdx);
 		
 		// Find the next seed in which there are 2 possible locations and 2 directions
 		/*ComputeIntegrationBox(seed, newCurv, obb, 1.f);
@@ -123,7 +130,11 @@ bool StreamLines::IntegrateAlongDirectionField(std::queue<Seed> & seeds, float d
 
 	int counter = 0;
 
-	while (counter++ < 10) {
+	Mesh::FaceHandle previousFace;
+	previousFace.invalidate();
+	while (counter++ < 40) {
+		if (counter >= 20)
+			int a=0;
 		Mesh::FaceHandle f_h = slPoint.f_h;
 		FaceData face = m_pMesh->property(faceData, f_h);
 		if (!face.bVisited) m_NumFacesVisited++;
@@ -131,7 +142,7 @@ bool StreamLines::IntegrateAlongDirectionField(std::queue<Seed> & seeds, float d
 
 		OBBoxEx obb;
 		StreamLinePoint newSLPoint = slPoint;
-		IntegrationStep(newSLPoint, obb, stepSize, dir);
+		IntegrationStep(newSLPoint, obb, stepSize, dir, previousFace);
 		obb.streamLineIdx = streamLineIdx;
 		obb.oBBoxIdx = numOBBox++;
 
@@ -149,9 +160,10 @@ bool StreamLines::IntegrateAlongDirectionField(std::queue<Seed> & seeds, float d
 				//if (dist < closestDist) closestDist = dist;
 			}
 		}
-
+		
 		// Add the obb to the faces
 		std::map<unsigned int, bool> visitedFaces;
+		//obb.DrawBox();
 		//AddOBBToFaces(obb, f_h, visitedFaces);
 		//m_pMesh->property(faceData, f_h).oBBoxes.push_back(obb);
 
@@ -174,6 +186,8 @@ void StreamLines::AddOBBToFaces(OBBoxEx & obb, Mesh::FaceHandle & f_h, std::map<
 		Vec3f v2 = m_pMesh->point(++fv_it);
 		Vec3f v3 = m_pMesh->point(++fv_it);
 		// if intersect obb tri
+		Vector3f newPos = obb.centerW + obb.halfWidthsW.x()*obb.rotVecW[0];
+		Vector3f newPos2 = obb.centerW - obb.halfWidthsW.x()*obb.rotVecW[0];
 		if (obb.IntersectTriangle(VCAST_TOEIGEN(v1), VCAST_TOEIGEN(v2), VCAST_TOEIGEN(v3))) {
 			m_pMesh->property(faceData, f_h).oBBoxes.push_back(obb);
 			// Find all the adjacent triangles 
@@ -182,7 +196,7 @@ void StreamLines::AddOBBToFaces(OBBoxEx & obb, Mesh::FaceHandle & f_h, std::map<
 	}
 }
 
-void StreamLines::WrapToNextFace(StreamLinePoint & slPoint, float & stepSize, float dir)
+void StreamLines::WrapToNextFace(StreamLinePoint & slPoint, float & stepSize, float dir, Mesh::FaceHandle & previousFace)
 {
 	// Triangle of face (TODO: make this a class and a property)
 	Mesh::FaceVertexIter fv_it = m_pMesh->fv_begin(slPoint.f_h);
@@ -194,7 +208,7 @@ void StreamLines::WrapToNextFace(StreamLinePoint & slPoint, float & stepSize, fl
 	Vector3f intersectPos;
 	// Note that the openmesh edge index is -1 + the standard index system
 	TriangleEdgesSegmentIntersect(VCAST_TOEIGEN(v1), VCAST_TOEIGEN(v2), VCAST_TOEIGEN(v3),
-		slPoint.curv.pos, slPoint.curv.pos + (dir*stepSize)*slPoint.curv.dir[0], intersectPos, edgeIdx);
+		slPoint.curv.pos, slPoint.curv.pos + (dir*stepSize)*slPoint.curv.dir[0], intersectPos, edgeIdx, *m_pMesh, slPoint.f_h, previousFace);
 	
 	Mesh::FaceHandle nextFaceHandle;
 	Mesh::FaceFaceIter ff_it = m_pMesh->ff_begin(slPoint.f_h);
@@ -210,13 +224,14 @@ void StreamLines::WrapToNextFace(StreamLinePoint & slPoint, float & stepSize, fl
 	Vector3f a1 = dir * slPoint.curv.dir[0];
 	Vector3f a2 = a1 - 2.f*m*(a1.dot(m));
 
-	std::cout << "Intersection Positions\n\n";
+	//std::cout << "Intersection Positions\n\n";
 	//PRINTV(slPoint.curv.pos);
 	//PRINTV(intersectPos)
 	
 	// Compute the partial step size, that is, the step size to the intersection position
-	if ((intersectPos - slPoint.curv.pos).norm() > stepSize) 
-		__debugbreak();
+	float dist = (intersectPos - slPoint.curv.pos).norm();
+	//if ((intersectPos - slPoint.curv.pos).norm() > stepSize) 
+	//	__debugbreak();
 	stepSize = (intersectPos - slPoint.curv.pos).norm();
 
 	// Flip because it will be multipied by dir later
@@ -225,13 +240,20 @@ void StreamLines::WrapToNextFace(StreamLinePoint & slPoint, float & stepSize, fl
 	slPoint.f_h = nextFaceHandle;
 }
 
-void StreamLines::IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir)
+void ProjectToPlane(Vector3f & nor, Vector3f & v)
+{
+	float dist = nor.dot(v);
+	v -= dist*nor;
+}
+
+void StreamLines::IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir, Mesh::FaceHandle & previousFace)
 {
 	// Triangle of face
 	Mesh::FaceVertexIter fv_it = m_pMesh->fv_iter(slPoint.f_h);
 	CurvatureInfo p1 = m_pMesh->property(*m_pCurvature, fv_it);
 	CurvatureInfo p2 = m_pMesh->property(*m_pCurvature, ++fv_it);
 	CurvatureInfo p3 = m_pMesh->property(*m_pCurvature, ++fv_it);
+	Vector3f nor(VCAST_TOEIGEN(m_pMesh->calc_face_normal(slPoint.f_h)));
 
 	// Determine if we are not on an edge
 	// Normally, floating point comparison does not work
@@ -248,7 +270,8 @@ void StreamLines::IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, floa
 		std::cout << std::endl;*/
 
 		// may be necessary to project this crap to the normal plane
-		ComputeBarycentricSLERP(p1, p2, p3, slPoint.curv.pos, slPoint.curv);
+		InterpolateCurvature(p1, p2, p3, slPoint.curv.pos, slPoint.curv);
+		ProjectToPlane(nor, slPoint.curv.dir[0]);
 		//PRINTV(slPoint.curv.dir[0]);
 
 		float d = abs(slPoint.curv.dir[0].dot(slPoint.curv.dir[1]));
@@ -275,15 +298,15 @@ void StreamLines::IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, floa
 	bool partialStep = 0;
 	if (!PointInTriangle(p1.pos, p2.pos, p3.pos, newSLPoint.curv.pos)) {
 		newSLPoint = slPoint;
-		WrapToNextFace(newSLPoint, partialStepSize, dir);
+		WrapToNextFace(newSLPoint, partialStepSize, dir, previousFace);
 		partialStep = 1;
 		// Add the obb to the next face (tmp code)
 		//m_pMesh->property(faceData, newSLPoint.f_h).oBBoxes.push_back(obb);
 	}
 
 	// Compute a slighlty larger obb
-	const float expansion = .1*partialStepSize;
-	obb.ComputeOBB(dir*slPoint.curv.dir[0], slPoint.curv.dir[1], slPoint.curv.pos, partialStepSize+expansion, m_StreamLineSep);
+	const float expansion = 0*partialStepSize;
+	obb.ComputeOBB(dir*slPoint.curv.dir[0], nor, slPoint.curv.pos, partialStepSize+expansion, m_StreamLineSep);
 
 	glBegin(GL_LINES);
 	glColor3f(1,0,0);
@@ -296,8 +319,9 @@ void StreamLines::IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, floa
 	//PRINTV(slPoint.curv.pos);
 	std::cout << '\n';
 
+	previousFace = slPoint.f_h;
 	slPoint = newSLPoint;
-	stepSize = partialStep ? stepSize-partialStepSize : m_StepSize; //partialStepSize != m_StepSize ? stepSize-partialStepSize : m_StepSize;
+	stepSize = partialStep ? abs(stepSize-partialStepSize) : m_StepSize; //partialStepSize != m_StepSize ? stepSize-partialStepSize : m_StepSize;
 }
 
 void StreamLines::DrawStreamLines()

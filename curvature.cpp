@@ -4,6 +4,7 @@
 using namespace OpenMesh;
 using namespace Eigen;
 using namespace std;
+#include "glut.h"
 
 void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvature) 
 {
@@ -40,26 +41,38 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 		}
 		// Normalize M_i
 		M_i /= sumWeight_i;
-
+		
 		// Find the two eigenvectors
 		EigenSolver<Matrix3d> solver(M_i);
 		CurvatureInfo info;
-		/*for (int i=0, j=0; i<3; ++i) {
+		float largestEigen = 0;
+		for (int i=0, j=0; i<3; ++i) {
 			double eig = real(solver.eigenvalues()(i));
-			if (abs(eig) > 1e-6) {
+			if (abs(eig) > largestEigen) {// && abs(eig) > 1e-6) {
 				info.curvatures[j] = eig;
 				Vector3d v = solver.pseudoEigenvectors().block(0, i, 3, 1);
-				info.directions[j] = Vec3f(v[0], v[1],v[2]);
-				info.dir[j++] = Vector3f(v[0], v[1], v[2]);
+				if (abs(N_i.dot(v)) > .1) continue;
+				//info.directions[j] = Vec3f(v[0], v[1],v[2]);
+				//info.dir[j++] = Vector3f(v[0], v[1], v[2]);
+				info.directions[0] = Vec3f(v[0], v[1],v[2]);
+				info.dir[0] = Vector3f(v[0], v[1], v[2]);
+				largestEigen = abs(eig);
 			}
-		}*/
+		}
 
-		Vector3d vvv(0,1,0);
+		/*Vector3d vvv(0,1,0);
 		Vector3d curvDir = -N_i.cross(vvv);
 		info.directions[0] = Vec3f(curvDir[0], curvDir[1], curvDir[2]);
 		info.directions[1] = Vec3f(curvDir[0], curvDir[1], curvDir[2]);
 		info.dir[0] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);
-		info.dir[1] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);
+		info.dir[1] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);*/
+		
+		for (int i=0; i<3; i++) {
+			for (int j=0; j<3; j++) {
+				info.M(i,j) = M_i(i,j);
+			}
+		}
+		info.MD = M_i;
 
 		info.pos = Vector3f(v_i[0], v_i[1], v_i[2]);
 		mesh.property(curvature, v_it) = info;
@@ -105,4 +118,110 @@ void computeViewCurvature(Mesh &mesh, OpenMesh::Vec3f camPos, OpenMesh::VPropHan
     
     mesh.property(viewCurvatureDerivative,it) = (N%(p[0]-p[2]))*(c[1]-c[0])/(2*area) + (N%(p[1]-p[0]))*(c[2]-c[0])/(2*area);
   }
+}
+
+
+void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
+	CurvatureInfo & c, Vector3f & pt, CurvatureInfo & result)
+{
+	float u,v,w;
+	ComputeBarycentricCoords(pt, a.pos, b.pos, c.pos, u, v, w);
+
+	Matrix3f M = u*a.M + v*b.M + w*c.M;
+	Eigen::EigenSolver<Matrix3f> solver(M);
+	CurvatureInfo info;
+	Vector3f eigenVec[3];
+	float largestEigen = 0;
+	int largestIdx = 0;
+	for (int i=0, j=0; i<3; ++i) {
+		double eig = real(solver.eigenvalues()(i));
+		if (abs(eig) > largestEigen) {
+			largestEigen = abs(eig);
+			largestIdx = i;
+		}
+		//if (abs(eig) > 1e-4) {
+			info.curvatures[j] = eig;
+			Vector3f v = solver.pseudoEigenvectors().block(0, i, 3, 1);
+			eigenVec[i] = Vector3f(v[0], v[1], v[2]);
+			//info.dir[j++] = Vector3f(v[0], v[1], v[2]);
+			//break;
+		//}
+	}
+
+	//if (largestIdx != 0)
+	//	__debugbreak();
+
+	info.dir[0] = eigenVec[largestIdx]; 
+	info.dir[1] = eigenVec[1];
+
+	Vector3f & p1 = a.pos;
+	Vector3f & p2 = b.pos;
+	Vector3f & p3 = c.pos;
+	Vector3f e[3] = {(p1-p3).normalized(), (p2-p1).normalized(), (p3-p2).normalized() };
+	Vector3f nor(e[0].cross(-e[2]));
+	//nor.normalize();
+
+	//result.pos = u*a.pos + v*b.pos + w*c.pos;
+	float sign = result.dir[0].dot(info.dir[0]) > 0 ? 1 : -1;
+	/*if (abs(nor.dot(info.dir[0])) > .5f) {
+		result.dir[0] = result.dir[0];
+
+		//if (abs(nor.dot(info.dir[1])) < .5f) {
+		//	result.dir[0] = info.dir[1];
+		//}
+	}*/
+	//else 
+		result.dir[0] = sign * info.dir[0];
+	result.dir[1] = info.dir[1];
+	result.pos = u*a.pos + v*b.pos + w*c.pos;
+
+
+
+
+
+
+
+
+
+
+
+
+	largestEigen = 0;
+	Vector3d N_i = Vector3d(nor.x(), nor.y(), nor.z());
+	Eigen::EigenSolver<Matrix3d> solver2((double)u*a.MD + (double)v*b.MD + (double)w*c.MD);
+	for (int i=0, j=0; i<3; ++i) {
+		double eig = real(solver2.eigenvalues()(i));
+		if (largestEigen < abs(eig)) {//abs(eig) > 1e-6) {
+			Vector3d v = solver2.pseudoEigenvectors().block(0, i, 3, 1);
+			if (abs(N_i.dot(v)) > .1) continue;
+			eigenVec[0] = Vector3f(v[0], v[1], v[2]);//j++
+			largestEigen = abs(eig);
+		}
+	}
+
+
+
+	glBegin(GL_LINES);
+
+	/*float scale = .02f;
+	glColor3f(1,1,0);
+	Vector3f vI = result.pos;
+	Vector3f vE = result.pos + scale*eigenVec[0].normalized();
+	glVertex3f(vI[0], vI[1], vI[2]);
+	glVertex3f(vE[0], vE[1], vE[2]);*/
+
+
+	/*glColor3f(0,1,1);
+	vI = result.pos;
+	vE = result.pos + scale*eigenVec[1].normalized();
+	glVertex3f(vI[0], vI[1], vI[2]);
+	glVertex3f(vE[0], vE[1], vE[2]);
+
+	glColor3f(1,0,1);
+	vI = result.pos;
+	vE = result.pos + scale*eigenVec[2].normalized();
+	glVertex3f(vI[0], vI[1], vI[2]);
+	glVertex3f(vE[0], vE[1], vE[2]);*/
+
+	glEnd();
 }

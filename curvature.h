@@ -4,12 +4,18 @@
 #include "mesh_definitions.h"
 
 using Eigen::Vector3f;
+using Eigen::Matrix3f;
 
 struct CurvatureInfo {
 	OpenMesh::Vec3f directions[2];
-
+    
 	// The position of curvature information need to lie on a vertex
 	Eigen::Vector3f pos;
+
+	// Matrix of curvature
+	Eigen::Matrix3f M;
+	Eigen::Matrix3d MD;
+
 	Eigen::Vector3f dir[2];
 	double curvatures[2];
 
@@ -42,7 +48,7 @@ inline void ComputeBarycentricCoords(Vector3f & pt, Vector3f & a, Vector3f & b, 
 }
 
 // Make this nice (put it in curvautreinfo)
-inline void ComputeBarycentricSLERP(CurvatureInfo & a, CurvatureInfo & b,
+/*inline void ComputeBarycentricSLERP(CurvatureInfo & a, CurvatureInfo & b,
 	CurvatureInfo & c, Vector3f & pt, CurvatureInfo & result)
 {
 	float u,v,w;
@@ -56,9 +62,11 @@ inline void ComputeBarycentricSLERP(CurvatureInfo & a, CurvatureInfo & b,
 	/*CurvatureInfo tmp0, tmp1;
 	a.ComputeSLERP(b, u+v, tmp0);
 	a.ComputeSLERP(c, u+v, tmp1);
-	tmp0.ComputeSLERP(tmp1, v/(u+v), result);*/
-}
+	tmp0.ComputeSLERP(tmp1, v/(u+v), result);
+}*/
 
+void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
+	CurvatureInfo & c, Vector3f & pt, CurvatureInfo & result);
 
 #endif
 

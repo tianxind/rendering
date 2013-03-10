@@ -63,11 +63,11 @@ private:
 	Mesh::FaceHandle FindLargestFace();
 	void FindNextTrinagle(std::queue<Seed> & seeds, Mesh::FaceHandle & f_h, OBBoxEx & obb);
 	bool ComputeStreamLineGroup(Mesh::FaceHandle & f_h, int streamLineIdx);
-	void IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir);
+	void IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir, Mesh::FaceHandle & previousFace);
 	bool IntegrateAlongDirectionField(std::queue<Seed> & seeds, float dir, int streamLineIdx);
 
 	void AddOBBToFaces(OBBoxEx & obb, Mesh::FaceHandle & f_h, std::map<unsigned int, bool> & visitedFaces);
-	void WrapToNextFace(StreamLinePoint & slPoint, float & partialStepSize, float dir);
+	void WrapToNextFace(StreamLinePoint & slPoint, float & partialStepSize, float dir, Mesh::FaceHandle & previousFace);
 
 	// Integration 
 	void IntegrateEuler(Vector3f & pos, const Vector3f & dir, float stepSize) {

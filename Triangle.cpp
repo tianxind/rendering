@@ -41,8 +41,8 @@ float Clamp(float n, float min, float max) {
 bool FindClosestPoint(const Vector3f & p1, const Vector3f & q1, const Vector3f & p2, const Vector3f & q2, Vector3f & point)
 {
 	float s,t;
-	const float epsUpper = 1-1e-3;
-	const float epsLower = 1e-3;
+	const float epsUpper = 1+1e-2;
+	const float epsLower = -1e-2;
 
 	Vector3f d1(q1-p1);
 	Vector3f d2(q2-p2);
@@ -73,13 +73,13 @@ bool FindClosestPoint(const Vector3f & p1, const Vector3f & q1, const Vector3f &
 		//s = Clamp((b-c)/a, 0.f, 1.f);
 	}
 
-	point = p1 + d1*s;
+	point = p2 + d2*t;
 
 	return 1;
 }
 
-bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, const Vector3f p3,
-	const Vector3f & e0, const Vector3f & e1, Vector3f & intersectionPos, int & edgeIdx)
+bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, const Vector3f p3, const Vector3f & e0, const Vector3f & e1,
+	Vector3f & intersectionPos, int & edgeIdx, Mesh & mesh, Mesh::FaceHandle & currentFace, Mesh::FaceHandle & previousFace)
 {
 	int r[3] = {0};
 	float d1 = DistanceToTrianglePlane(p1, p2, p3, e0);
@@ -88,15 +88,39 @@ bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, con
 	std::cout << '\n' << std::endl;
 	//PRINTV(e0);
 	//PRINTV(e1);
-	PRINTV(p1);
-	PRINTV(p2);
-	PRINTV(p3);
-	r[0] = FindClosestPoint(e0, e1, p3, p1, intersectionPos);
-	r[1] = FindClosestPoint(e0, e1, p1, p2, intersectionPos);
-	r[2] = FindClosestPoint(e0, e1, p2, p3, intersectionPos);
-	if (r[0]+r[1]+r[2] != 1) 
-		int a=0;
+	//PRINTV(p1);
+	//PRINTV(p2);
+	//PRINTV(p3);
+	Vector3f interPos[3];
+	r[0] = FindClosestPoint(e0, e1, p3, p1, interPos[0]);
+	r[1] = FindClosestPoint(e0, e1, p1, p2, interPos[1]);
+	r[2] = FindClosestPoint(e0, e1, p2, p3, interPos[2]);
+	if (r[0]+r[1]+r[2] == 3) {
+		__debugbreak();	//Triangle too small
+	}
+	if (r[0]+r[1]+r[2] == 2) {
+		edgeIdx = 0;
+		for (Mesh::FaceFaceIter ff_it=mesh.ff_begin(currentFace), end=mesh.ff_end(currentFace); ff_it != end; ++ff_it) {
+
+			Mesh::FaceHandle ffff = ff_it.handle();
+			int nodthing=0;
+		}
+		for (Mesh::FaceFaceIter ff_it=mesh.ff_begin(currentFace), end=mesh.ff_end(currentFace); ff_it != end; ++ff_it, ++edgeIdx) {
+			// SERIOUS PROBLEM IF THIS HAPPENS
+			// Never should happen
+			if (edgeIdx >= 3 || edgeIdx < 0)
+				__debugbreak();
+
+			Mesh::FaceHandle ffff = ff_it.handle();
+			if (r[edgeIdx] != 0 && ff_it.handle() != previousFace)  break;
+		}
+		intersectionPos = interPos[edgeIdx];
+		return 1;
+	}
+	if (r[0]+r[1]+r[2] == 0)
+		__debugbreak(); //Never should happen
 	edgeIdx = 0*r[0] + 1*r[1] + 2*r[2];
+	intersectionPos = interPos[edgeIdx];
 	
 	return 1;
 }
@@ -104,6 +128,32 @@ bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, con
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+		/*Vector3f p[3] = {p1,p2,p3};
+		Vector3f e[3] = {(p1-p3).normalized(), (p2-p1).normalized(), (p3-p2).normalized() };
+		Vector3f nor(e[0].cross(-e[2]));
+		nor.normalize();
+
+		int edgesIdx[2] = {r[0] ? 0 : 1, r[2] ? 2 : 1 };
+		// Which edge is in the direction of the edge ray
+		Vector3f v(e1-e0);
+		int signs = 1*(e[edgesIdx[0]].dot(v) > 0) + 2*(e[edgesIdx[1]].dot(v) > 0) + 3*(e[0].dot(v) > 0);
+
+		if (signs == 0 || signs >= 3)
+			__debugbreak();
+		else edgeIdx = edgesIdx[signs-1];
+		return 1;*/
 
 
 
