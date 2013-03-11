@@ -18,6 +18,8 @@ struct OBBoxEx : public OBBox {
 class StreamLines {
 private:
 	struct Edge {
+		Edge() {}
+		Edge(const Vector3f & p1, const Vector3f & p2) {pos[0] = p1; pos[1] = p2; }
 		Vector3f pos[2];
 		double dist[2];
 	};
@@ -51,6 +53,8 @@ private:
 
 	int m_NumFacesVisited;
 
+	int m_NumOBBoxes;
+
 	/*struct OBBToAdd {
 		OBBToAdd(OBBoxEx & _obb, Mesh::FaceHandle & _face):obb(_obb),face(_face) {}
 		OBBoxEx obb;
@@ -60,14 +64,16 @@ private:
 
 	std::vector<StreamLine> m_StreamLines;
 
+	std::vector<Mesh::FaceHandle> m_FacesTouched;
+
 	Mesh::FaceHandle FindLargestFace();
 	void FindNextTrinagle(std::queue<Seed> & seeds, Mesh::FaceHandle & f_h, OBBoxEx & obb);
 	bool ComputeStreamLineGroup(Mesh::FaceHandle & f_h, int streamLineIdx);
-	void IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir, Mesh::FaceHandle & previousFace);
+	bool IntegrationStep(StreamLinePoint & slPoint, OBBoxEx & obb, float & stepSize, float dir, Mesh::FaceHandle & previousFace);
 	bool IntegrateAlongDirectionField(std::queue<Seed> & seeds, float dir, int streamLineIdx);
 
 	void AddOBBToFaces(OBBoxEx & obb, Mesh::FaceHandle & f_h, std::map<unsigned int, bool> & visitedFaces);
-	void WrapToNextFace(StreamLinePoint & slPoint, float & partialStepSize, float dir, Mesh::FaceHandle & previousFace);
+	bool WrapToNextFace(StreamLinePoint & slPoint, float & partialStepSize, float dir, Mesh::FaceHandle & previousFace);
 
 	// Integration 
 	void IntegrateEuler(Vector3f & pos, const Vector3f & dir, float stepSize) {

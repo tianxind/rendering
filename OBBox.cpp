@@ -181,13 +181,24 @@ bool OBBox::IntersectTriangle(Vector3f & v1, Vector3f & v2, Vector3f & v3)
 	Matrix3f rot;
 	RotationW(rot);
 	Vector3f relV[3] = {rot*(v1-centerW), rot*(v2-centerW), rot*(v3-centerW) };
-	return triAABBOverlap(Vector3f(0,0,0), halfWidthsW, relV);
+	float triVert[3][3] = { 
+		{relV[0].x(), relV[0].y(), relV[0].z()}, 
+		{relV[1].x(), relV[1].y(), relV[1].z()},
+		{relV[2].x(), relV[2].y(), relV[2].z()}
+	};
+	float zero[3] = {0};
+	float halfWidths[3] = {halfWidthsW.x(), halfWidthsW.y(), halfWidthsW.z()};
+	return triBoxOverlap(zero, halfWidths, triVert);
+
+	//return triAABBOverlap((float*)
+	//triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float * triverts[3])
+	//return triAABBOverlap(Vector3f(0,0,0), halfWidthsW, relV);
 }
 
 void OBBox::DrawBox()
 {
 
-	glMatrixMode(GL_MODELVIEW);
+  glMatrixMode(GL_MODELVIEW);
   glPushMatrix();
 
   /* A step backward, then spin the cube */

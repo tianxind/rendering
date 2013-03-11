@@ -1,10 +1,59 @@
 
 #include <Eigen/Eigenvalues>
 #include "curvature.h"
+#include "Triangle.h"
+#include "glut.h"
+
 using namespace OpenMesh;
 using namespace Eigen;
 using namespace std;
-#include "glut.h"
+
+void ComputeBarycentricCoords(const Vector3f & pt, const Vector3f & a, const Vector3f & b, const Vector3f & c, float & u, float & v, float & w)
+{
+	// Real Time Collision Detection
+	Vector3f v0 = b-a, v1 = c-a, v2 = pt-a;
+	float d00 = v0.dot(v0);
+	float d01 = v0.dot(v1);
+	float d11 = v1.dot(v1);
+	float d20 = v2.dot(v0);
+	float d21 = v2.dot(v1);
+	float denom = d00 * d11 - d01 * d01;
+	v = (d11*d20 - d01*d21)/denom;
+	w = (d00*d21 - d01*d20)/denom;
+	u = 1.f - v - w;
+}
+
+int cmp(const void * p1, const void * p2)
+{
+	if (*((double*)p1) > *((double*)p2)) return -1;
+	else return 1;
+}
+
+void FindPrincipalDirections(const Matrix3f & M, Vector3f & T1, Vector3f & T2, double & k1, double & k2)
+{
+	// Find the two eigenvectors
+	EigenSolver<Matrix3f> solver(M);
+	struct tmp {
+		double absEigenVal;
+		double eigenVal;
+		Vector3f eigenVec;
+	};
+	tmp e[3];
+	for (int i=0; i<3; ++i) {
+		double eig = real(solver.eigenvalues()(i));
+		Vector3f v = solver.pseudoEigenvectors().block(0, i, 3, 1);
+
+		e[i].absEigenVal = abs(eig);
+		e[i].eigenVal = eig;
+		e[i].eigenVec = Vector3f(v[0], v[1], v[2]);
+	}
+
+	qsort(e, 3, sizeof(tmp), cmp);
+	T1 = e[0].eigenVec;
+	T2 = e[1].eigenVec;
+	k1 = e[0].eigenVal;
+	k2 = e[1].eigenVal;
+}
 
 void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvature) 
 {
@@ -42,7 +91,7 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 		// Normalize M_i
 		M_i /= sumWeight_i;
 		
-		// Find the two eigenvectors
+		/*// Find the two eigenvectors
 		EigenSolver<Matrix3d> solver(M_i);
 		CurvatureInfo info;
 		float largestEigen = 0;
@@ -54,11 +103,19 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 				if (abs(N_i.dot(v)) > .1) continue;
 				//info.directions[j] = Vec3f(v[0], v[1],v[2]);
 				//info.dir[j++] = Vector3f(v[0], v[1], v[2]);
-				info.directions[0] = Vec3f(v[0], v[1],v[2]);
+				//info.directions[0] = Vec3f(v[0], v[1],v[2]);
 				info.dir[0] = Vector3f(v[0], v[1], v[2]);
 				largestEigen = abs(eig);
 			}
-		}
+		}*/
+
+		CurvatureInfo info;
+		for (int i=0; i<3; i++) {
+			for (int j=0; j<3; j++) {
+				info.M(i,j) = M_i(i,j);
+			}
+		};
+		FindPrincipalDirections(info.M, info.dir[0], info.dir[1], info.curvatures[0], info.curvatures[1]);
 
 		/*Vector3d vvv(0,1,0);
 		Vector3d curvDir = -N_i.cross(vvv);
@@ -67,12 +124,7 @@ void computeCurvature(Mesh &mesh, OpenMesh::VPropHandleT<CurvatureInfo> &curvatu
 		info.dir[0] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);
 		info.dir[1] = Vector3f(curvDir[0], curvDir[1], curvDir[2]);*/
 		
-		for (int i=0; i<3; i++) {
-			for (int j=0; j<3; j++) {
-				info.M(i,j) = M_i(i,j);
-			}
-		}
-		info.MD = M_i;
+		//info.MD = M_i;
 
 		info.pos = Vector3f(v_i[0], v_i[1], v_i[2]);
 		mesh.property(curvature, v_it) = info;
@@ -88,9 +140,9 @@ void computeViewCurvature(Mesh &mesh, OpenMesh::Vec3f camPos, OpenMesh::VPropHan
     Vec3f v = camPos - mesh.point(v_it.handle());
     CurvatureInfo c_info = mesh.property(curvature, v_it.handle());
     Vector3d view(v[0], v[1], v[2]);
-    Vec3f t1 = c_info.directions[0];
+    Vec3f t1 = VT_OM(c_info.dir[0]);
     Vector3d T1(t1[0], t1[1], t1[2]);
-    Vec3f t2 = c_info.directions[1];
+    Vec3f t2 = VT_OM(c_info.dir[1]);
     Vector3d T2(t2[0], t2[1], t2[2]);
     double sin = T1.dot(view);
     double cos = T2.dot(view);
@@ -121,14 +173,18 @@ void computeViewCurvature(Mesh &mesh, OpenMesh::Vec3f camPos, OpenMesh::VPropHan
 }
 
 
-void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
-	CurvatureInfo & c, Vector3f & pt, CurvatureInfo & result)
+void InterpolateCurvature(const CurvatureInfo & a, const CurvatureInfo & b, 
+	const CurvatureInfo & c, const Vector3f & nor, const Vector3f & pt, CurvatureInfo & result)
 {
 	float u,v,w;
 	ComputeBarycentricCoords(pt, a.pos, b.pos, c.pos, u, v, w);
 
+	//Matrix3d M = (double)u*a.MD + (double)v*b.MD + (double)w*c.MD;
 	Matrix3f M = u*a.M + v*b.M + w*c.M;
-	Eigen::EigenSolver<Matrix3f> solver(M);
+	CurvatureInfo info;
+	FindPrincipalDirections(M, info.dir[0], info.dir[1], info.curvatures[0], info.curvatures[1]);
+
+	/*Eigen::EigenSolver<Matrix3f> solver(M);
 	CurvatureInfo info;
 	Vector3f eigenVec[3];
 	float largestEigen = 0;
@@ -147,19 +203,15 @@ void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
 			//break;
 		//}
 	}
-
 	//if (largestIdx != 0)
 	//	__debugbreak();
 
 	info.dir[0] = eigenVec[largestIdx]; 
-	info.dir[1] = eigenVec[1];
+	//info.dir[1] = eigenVec[1];*/
 
-	Vector3f & p1 = a.pos;
-	Vector3f & p2 = b.pos;
-	Vector3f & p3 = c.pos;
-	Vector3f e[3] = {(p1-p3).normalized(), (p2-p1).normalized(), (p3-p2).normalized() };
-	Vector3f nor(e[0].cross(-e[2]));
-	//nor.normalize();
+	const Vector3f & p1 = a.pos;
+	const Vector3f & p2 = b.pos;
+	const Vector3f & p3 = c.pos;
 
 	//result.pos = u*a.pos + v*b.pos + w*c.pos;
 	float sign = result.dir[0].dot(info.dir[0]) > 0 ? 1 : -1;
@@ -186,7 +238,7 @@ void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
 
 
 
-	largestEigen = 0;
+	/*largestEigen = 0;
 	Vector3d N_i = Vector3d(nor.x(), nor.y(), nor.z());
 	Eigen::EigenSolver<Matrix3d> solver2((double)u*a.MD + (double)v*b.MD + (double)w*c.MD);
 	for (int i=0, j=0; i<3; ++i) {
@@ -197,7 +249,7 @@ void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
 			eigenVec[0] = Vector3f(v[0], v[1], v[2]);//j++
 			largestEigen = abs(eig);
 		}
-	}
+	}*/
 
 
 
@@ -224,4 +276,9 @@ void InterpolateCurvature(CurvatureInfo & a, CurvatureInfo & b,
 	glVertex3f(vE[0], vE[1], vE[2]);*/
 
 	glEnd();
+}
+
+void InterpolateCurvature(const Triangle & tri, const Vector3f & pt, CurvatureInfo & result)
+{
+	InterpolateCurvature(tri.v[0], tri.v[1], tri.v[2], tri.n, pt, result);
 }

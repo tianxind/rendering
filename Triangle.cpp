@@ -82,10 +82,10 @@ bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, con
 	Vector3f & intersectionPos, int & edgeIdx, Mesh & mesh, Mesh::FaceHandle & currentFace, Mesh::FaceHandle & previousFace)
 {
 	int r[3] = {0};
-	float d1 = DistanceToTrianglePlane(p1, p2, p3, e0);
-	float d2 = DistanceToTrianglePlane(p1, p2, p3, e1);
-	Vector3f dif = e1 - e0;
-	std::cout << '\n' << std::endl;
+	//float d1 = DistanceToTrianglePlane(p1, p2, p3, e0);
+	//float d2 = DistanceToTrianglePlane(p1, p2, p3, e1);
+	//Vector3f dif = e1 - e0;
+	//std::cout << '\n' << std::endl;
 	//PRINTV(e0);
 	//PRINTV(e1);
 	//PRINTV(p1);
@@ -100,32 +100,47 @@ bool TriangleEdgesSegmentIntersect(const Vector3f & p1, const Vector3f & p2, con
 	}
 	if (r[0]+r[1]+r[2] == 2) {
 		edgeIdx = 0;
-		for (Mesh::FaceFaceIter ff_it=mesh.ff_begin(currentFace), end=mesh.ff_end(currentFace); ff_it != end; ++ff_it) {
+		/*for (Mesh::FaceFaceIter ff_it=mesh.ff_begin(currentFace), end=mesh.ff_end(currentFace); ff_it != end; ++ff_it) {
 
 			Mesh::FaceHandle ffff = ff_it.handle();
 			int nodthing=0;
-		}
+		}*/
 		for (Mesh::FaceFaceIter ff_it=mesh.ff_begin(currentFace), end=mesh.ff_end(currentFace); ff_it != end; ++ff_it, ++edgeIdx) {
 			// SERIOUS PROBLEM IF THIS HAPPENS
 			// Never should happen
 			if (edgeIdx >= 3 || edgeIdx < 0)
 				__debugbreak();
 
-			Mesh::FaceHandle ffff = ff_it.handle();
+			//Mesh::FaceHandle ffff = ff_it.handle();
 			if (r[edgeIdx] != 0 && ff_it.handle() != previousFace)  break;
 		}
 		intersectionPos = interPos[edgeIdx];
 		return 1;
 	}
 	if (r[0]+r[1]+r[2] == 0)
-		__debugbreak(); //Never should happen
+		return 0;//__debugbreak(); //Never should happen
+
 	edgeIdx = 0*r[0] + 1*r[1] + 2*r[2];
 	intersectionPos = interPos[edgeIdx];
 	
 	return 1;
 }
 
+float DistanceToTrianglePlane(const Triangle & tri, const Vector3f & point) 
+{
+	return DistanceToTrianglePlane(tri.v[0].pos, tri.v[1].pos, tri.v[2].pos, point);
+}
 
+bool PointInTriangle(Triangle & tri, Vector3f & point)
+{
+	return PointInTriangle(tri.v[0].pos, tri.v[1].pos, tri.v[2].pos, point);
+}
+
+bool TriangleEdgesSegmentIntersect(const Triangle & tri, const Vector3f & e0, const Vector3f & e1, 
+	Vector3f & intersectionPos, int & edgeIdx, Mesh & mesh, Mesh::FaceHandle & currentFace, Mesh::FaceHandle & previousFace)
+{
+	return TriangleEdgesSegmentIntersect(tri.v[0].pos, tri.v[1].pos, tri.v[2].pos, e0, e1, intersectionPos, edgeIdx, mesh, currentFace, previousFace);
+}
 
 
 
@@ -363,7 +378,7 @@ int planeBoxOverlap(float normal[3], float vert[3], float maxbox[3])	// -NJMP-
 
 
 
-bool triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float * triverts[3])
+bool triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float triverts[3][3])
 
 {
 
@@ -515,9 +530,9 @@ bool triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float * triverts[3])
 
 }
 
-bool triAABBOverlap(Vector3f & boxcenter, Vector3f & boxhalfsize, Vector3f * triverts)
+/*bool triAABBOverlap(Vector3f & boxcenter, Vector3f & boxhalfsize, Vector3f * triverts)
 {
 	return triBoxOverlap((float*)&boxcenter, (float*)&boxhalfsize, (float**)&triverts);
-}
+}*/
 
 
