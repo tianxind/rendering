@@ -1,10 +1,11 @@
-
 #define _USE_MATH_DEFINES
 #include <OpenMesh/Core/IO/Options.hh>
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <iostream>
 #include <cmath>
 #include <cstdio>
+#include "Framework.h"
+#include "Shader.h"
 #include "glut.h"
 #include <Eigen/Eigenvalues>
 #include "curvature.h"
@@ -12,7 +13,8 @@
 #include "image_generation.h"
 #include "decimate.h"
 #include "StreamLines.h"
- 
+
+
 #ifndef _DEBUG
 	#pragma comment(lib, "OpenMeshCore.lib")
 	#pragma comment(lib, "OpenMeshTools.lib")
@@ -20,6 +22,7 @@
 	//NEVER USE DEBUG DLLS IN RELEASE MODE !!!!
 	#pragma comment(lib, "OpenMeshCored.lib")
 	#pragma comment(lib, "OpenMeshToolsd.lib")
+#pragma comment(lib, "glew32.lib")
 #endif
 
 using namespace std;
@@ -35,6 +38,7 @@ VPropHandleT<CurvatureInfo> curvature;
 Mesh mesh;
 StreamLines streamLines;
 
+std::auto_ptr<Shader> shaderPhong;
 bool leftDown = false, rightDown = false, middleDown = false;
 int lastPos[2];
 float cameraPos[4] = {0,0,2,1};
@@ -45,6 +49,7 @@ bool showSurface = true, showAxes = true, showCurvature = false, showNormals = f
 float specular[] = { 1.0, 1.0, 1.0, 1.0 };
 float shininess[] = { 50.0 };
 
+/* Returns 1 if kw is postivie and -1 if kw is negative */
 int KwSign(double kw){
   if(kw < 0) return -1;
   else return 1;
@@ -57,10 +62,6 @@ int KwSign(double kw){
 bool ZeroCrossingExists(double* kw, size_t* interp){
   size_t index = 0;
   for(size_t i = 1; i <= 3; ++i){
-    // double kw1 = abs(kw[i%3]);
-    // double kw2 = abs(kw[(i-1)%3]);
-    // double kw1 = kw[2];
-    //  double kw2 = kw[0];
     if(KwSign(kw[i%3]) != KwSign(kw[(i-1)%3])){
       interp[index] = (i-1)%3;
       interp[index+1] = i%3;
@@ -88,11 +89,9 @@ bool IsValidInflectionPoint(Mesh::FaceIter f_It, Vec3f* vertex, Vec3f pt1,
   Vec3f v1 = camPos - pt1;
   Vec3f v2 = camPos - pt2;
   Vec3f n = mesh.normal(f_It.handle());
-  //Vec3f w = v - n*(n|v);
 
   Vector3d V1(v1[0], v1[1], v1[2]);
   Vector3d V2(v2[0], v2[1], v2[2]);
-  //Vector3d W(w[0], w[1], w[2]); //dot product of kw_gradient with v
 
   double theta_d1 = acos((n|v1)/V1.norm());
   double theta_d2 = acos((n|v2)/V2.norm());
@@ -101,12 +100,6 @@ bool IsValidInflectionPoint(Mesh::FaceIter f_It, Vec3f* vertex, Vec3f pt1,
  
   return  (dwkw1 > TD_THRESH && dwkw2 > TD_THRESH && theta_d1 > THETAD_THRESH && theta_d2 >THETAD_THRESH);
 }
-/*
-bool IsValidInflectionPointNew(Mesh::FaceIter f_It, double t1, double t2,
-			       size_t* interp, Vec3f camPos){
-   Vec3f kw_gradient = mesh.property(viewCurvatureDerivative,f_It.handle());
-   
-}*/
 
 /* Finds Zero Crossing and stores their coordinates in zero_x */
 bool FindZeroCrossings(Vec3f* vertex, double* kw, Vec3f* zero_x, 
@@ -150,7 +143,6 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
     }
           
     // Find points on different edges where kw = 0 & dwkw >0
-    //  if(abs(kw[0]) > .02 && abs(kw[1]) > .02 && abs(kw[2]) > .02){
     zero_x_found = FindZeroCrossings(vertex, kw, zero_x, it, actualCamPos);
     Vec3f pt1 = zero_x[0];
     Vec3f pt2 = zero_x[1];
@@ -162,40 +154,99 @@ void renderSuggestiveContours(Vec3f actualCamPos) { // use this camera position 
       glVertex3f(pt2[0], pt2[1], pt2[2]);
       glEnd();
      }
-    //  }
   }
 }
 
+/* Sends material properties to vertex shader */
+void setMaterialData(GLuint shaderId){
+	GLint diffuse = glGetUniformLocation(shaderId, "Kd");
+    glUniform3f(diffuse, 0.49, 0.0, 0.4);
+
+    // Specular material
+    GLint specular = glGetUniformLocation(shaderId, "Ks");
+    glUniform3f(specular, 0.5, 0.5, 0.5);
+  
+    // Ambient material
+    GLint ambient = glGetUniformLocation(shaderId, "Ka");
+    glUniform3f(ambient, 0.4, 0.25, 0.14);
+
+    // Specular power
+    GLint shininess = glGetUniformLocation(shaderId, "alpha");
+    glUniform1f(shininess, 20);
+}
+
+/* Sends vertex, normal, texture data to vertex shader */
+void setMeshData(GLuint shaderId, Vec3f* vertices, Vec3f* normals){
+	Vector3f emptyvec;
+
+	// Texture Coordinates
+	GLint texcoord = glGetAttribLocation(shaderId, "texcoordIn");
+    glEnableVertexAttribArray(texcoord);
+	glVertexAttribPointer(texcoord, 2, GL_FLOAT, 0, sizeof(Vector3f), &emptyvec);
+
+	// Normals
+    GLint normal = glGetAttribLocation(shaderId, "normalIn");
+    glEnableVertexAttribArray(normal);
+
+    glVertexAttribPointer(normal, 3, GL_FLOAT, 0, sizeof(Vec3f), (GLvoid*)normals);
+
+	GLint position = glGetAttribLocation(shaderId, "positionIn");
+    glEnableVertexAttribArray(position);
+    glVertexAttribPointer(position, 3, GL_FLOAT, 0, sizeof(Vec3f), (GLvoid*)vertices);
+}
+
+
 void drawTriangles()
 {
+	unsigned num_vertices = mesh.n_faces()*3;
+	Vec3f *vertices = new Vec3f[num_vertices];
+	Vec3f *normals = new Vec3f[num_vertices];
+	unsigned *indices = new unsigned[num_vertices];
+	size_t index = 0;
+
+	// Activate Shader
+	glUseProgram(shaderPhong->programID());		
+
+	// Set Material Properties for shader
+	setMaterialData(shaderPhong->programID());
+	
+	// Store vertices, normals, and their indices in arrays to be passed to shader
 	for (Mesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end(); ++f_it) {
-		Mesh::ConstFaceVertexIter cfvIt;
-		cfvIt = mesh.cfv_iter(f_it.handle());
+		Mesh::ConstFaceVertexIter cfvIt = mesh.cfv_iter(f_it.handle());
 
-		glBegin(GL_TRIANGLES);
+		//glBegin(GL_TRIANGLES);
 		//glColor3f(0.1, 0.2, 0.3);
- 
-		Vec3f pointA = mesh.point(cfvIt.handle());
-		Vec3f nA = mesh.normal(cfvIt.handle());
-		glNormal3d(nA[0], nA[1], nA[2]);
-		glVertex3f(pointA[0], pointA[1], pointA[2]);
-
-		Vec3f pointB = mesh.point((++cfvIt).handle());
-		Vec3f nB = mesh.normal(cfvIt.handle());
-		glNormal3d(nB[0], nB[1], nB[2]);
-		glVertex3f(pointB[0], pointB[1], pointB[2]);
-
-		Vec3f pointC = mesh.point((++cfvIt).handle());
-		Vec3f nC = mesh.normal(cfvIt.handle());
-		glNormal3d(nC[0], nC[1], nC[2]);
-		glVertex3f(pointC[0], pointC[1], pointC[2]);
-
-		glEnd();
+		for(int i = 0; i < 3; ++i){
+			Vec3f point = mesh.point(cfvIt.handle());
+			Vec3f normal = mesh.normal(cfvIt.handle());
+			vertices[index] = point;
+			normals[index] = normal;
+			indices[index] = index;
+			index++;
+			cfvIt++;
+			//glNormal3d(normal[0], normal[1], normal[2]);
+			//glVertex3f(point[0], point[1], point[2]);
+		}
+		//glEnd();
 	}	
+
+	// Pass stored vertices, normals to shader and draw
+	setMeshData(shaderPhong->programID(), vertices, normals);
+	glDrawElements(GL_TRIANGLES,  num_vertices, GL_UNSIGNED_INT, &(indices[0]));
+
+	// Clean Up Shader Elements 
+	glUseProgram(0);
+	glDisableVertexAttribArray( glGetAttribLocation(shaderPhong->programID(), "positionIn"));
+	glDisableVertexAttribArray( glGetAttribLocation(shaderPhong->programID(), "normalIn"));
+	glDisableVertexAttribArray( glGetAttribLocation(shaderPhong->programID(), "texcoordIn"));
+
+	delete[] indices;
+	delete[] vertices;
+	delete[] normals;
 }
 
 void renderMesh() {
-	//showSurface = 1;
+    //	showSurface = 1;
 	if (!showSurface) glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE); // render regardless to remove hidden lines
 
 	glEnable(GL_LIGHTING);
@@ -222,15 +273,16 @@ void renderMesh() {
 	if (!showSurface) glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 
 	glDisable(GL_LIGHTING);
-	glDepthRange(0,0.98);
+	glDepthRange(0,.98);
 
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
+
 	renderSuggestiveContours(actualCamPos);
 
 	// We'll be nice and provide you with code to render feature edges below
 	glBegin(GL_LINES);
 	glColor3f(0,0,0);
-	glLineWidth(2.0f);
+	glLineWidth(5.0f);
 	for (Mesh::ConstEdgeIter it = mesh.edges_begin(); it != mesh.edges_end(); ++it)
 		if (isFeatureEdge(mesh,*it,actualCamPos)) {
 			Mesh::HalfedgeHandle h0 = mesh.halfedge_handle(it,0);
@@ -241,6 +293,7 @@ void renderMesh() {
 			glVertex3f(target[0],target[1],target[2]);
 		}
 	glEnd();
+
 
 	if (showCurvature) {
 		glBegin(GL_LINES);
@@ -257,10 +310,10 @@ void renderMesh() {
 			glVertex3f(d1Forward[0], d1Forward[1], d1Forward[2]);
 			glVertex3f(d1Back[0], d1Back[1], d1Back[2]);
 
-			Vec3f d2Forward = p + e2 * vecLen;
+			/*Vec3f d2Forward = p + e2 * vecLen;
 			Vec3f d2Back = p - e2 * vecLen;
 			glVertex3f(d2Forward[0], d2Forward[1], d2Forward[2]);
-			glVertex3f(d2Back[0], d2Back[1], d2Back[2]);
+			glVertex3f(d2Back[0], d2Back[1], d2Back[2]);*/
 		}
 		glEnd();
 	}
@@ -278,8 +331,7 @@ void renderMesh() {
 		glEnd();
 	}
 
-	//streamLines.ComputeStreamLines(mesh, curvature, 1.f);
-	//streamLines.DrawStreamLines();
+	streamLines.DrawStreamLines();
 
 	glDepthRange(0,1);
 }
@@ -386,9 +438,18 @@ void reshape(int width, int height) {
 	glutPostRedisplay();
 }
 
+void loadShaders(){
+	shaderPhong.reset(new Shader("shaders/phong"));
+	if (!shaderPhong->loaded()) {
+		std::cerr << "Shader failed to load" << std::endl;
+		std::cerr << shaderPhong->errors() << std::endl;
+		exit(-1);
+	}
+}
+
 int main() {
 	int argc = 2;
-	char * argv[] = {"InkRendering", "models/homer.off"}; 
+	char * argv[] = {"InkRendering", "models/horse.off"}; 
 
 	if (argc < 2) {
 		cout << "Usage: " << argv[0] << " mesh_filename\n";
@@ -412,6 +473,7 @@ int main() {
 	cout << '\t' << mesh.n_vertices() << " vertices.\n";
 	cout << '\t' << mesh.n_edges() << " edges.\n";
 	cout << '\t' << mesh.n_faces() << " faces.\n";
+
 
 	//simplify(mesh, .05f);
 
@@ -441,19 +503,22 @@ int main() {
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
 	computeViewCurvature(mesh,actualCamPos,curvature,viewCurvature,viewCurvatureDerivative);
 
-	//streamLines.ComputeStreamLines(mesh, curvature, 1.f);
-
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH); 
 	glutInitWindowSize(windowWidth, windowHeight); 
 	glutCreateWindow(argv[0]);
+
+
+    GLint error = glewInit();
 
 	glutDisplayFunc(display);
 	glutMotionFunc(mouseMoved);
 	glutMouseFunc(mouse);
 	glutReshapeFunc(reshape);
 	glutKeyboardFunc(keyboard);
-
+    	// Init Shader 
+	loadShaders();
+	glUseProgram(0);
 	glutMainLoop();
 
 	return 0;
