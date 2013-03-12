@@ -222,8 +222,8 @@ void drawTriangles()
 			vertices[index] = point;
 			normals[index] = normal;
 			indices[index] = index;
-			index++;
-			cfvIt++;
+			++index;
+			++cfvIt;
 			//glNormal3d(normal[0], normal[1], normal[2]);
 			//glVertex3f(point[0], point[1], point[2]);
 		}
@@ -264,12 +264,12 @@ void renderMesh() {
     glDisable( GL_POLYGON_OFFSET_FILL );
 
     // draw the wireframe
-    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+    /*glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 	glDisable(GL_LIGHTING);
 	glColor3f(0, 0, 0);
 	drawTriangles();
    	glEnable(GL_LIGHTING);
-
+	*/
 	if (!showSurface) glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 
 	glDisable(GL_LIGHTING);
@@ -280,7 +280,7 @@ void renderMesh() {
 	renderSuggestiveContours(actualCamPos);
 
 	// We'll be nice and provide you with code to render feature edges below
-	glBegin(GL_LINES);
+	/*glBegin(GL_LINES);
 	glColor3f(0,0,0);
 	glLineWidth(5.0f);
 	for (Mesh::ConstEdgeIter it = mesh.edges_begin(); it != mesh.edges_end(); ++it)
@@ -292,8 +292,36 @@ void renderMesh() {
 			glVertex3f(source[0],source[1],source[2]);
 			glVertex3f(target[0],target[1],target[2]);
 		}
-	glEnd();
+	glEnd();*/
 
+	glBegin(GL_QUADS);
+	glColor3f(0,0,0);
+	for (Mesh::ConstEdgeIter it = mesh.edges_begin(); it != mesh.edges_end(); ++it)
+		if (isFeatureEdge(mesh,*it,actualCamPos)) {
+			Mesh::HalfedgeHandle h0 = mesh.halfedge_handle(it,0);
+			Mesh::HalfedgeHandle h1 = mesh.halfedge_handle(it,1);
+			Vec3f source(mesh.point(mesh.from_vertex_handle(h0)));
+			Vec3f target(mesh.point(mesh.from_vertex_handle(h1)));
+			Vec3f v = target - source;
+			Vec3f midpoint = (source + target)*0.5;
+			Vec3f n = actualCamPos - midpoint;
+			n.normalize();
+			Vec3f tangent = n%v;
+		    tangent.normalize();
+			tangent *=.01;
+			Vec3f upperL = source + tangent;
+			Vec3f lowerL = source - tangent;
+			Vec3f upperR = target + tangent;
+			Vec3f lowerR = target - tangent;
+		
+			glVertex3f(lowerL[0], lowerL[1], lowerL[2]);
+			glVertex3f(upperL[0], upperL[1], upperL[2]);
+		
+					glVertex3f(upperR[0], upperR[1], upperR[2]);
+						glVertex3f(lowerR[0], lowerR[1], lowerR[2]);
+			
+		}
+	glEnd();
 
 	if (showCurvature) {
 		glBegin(GL_LINES);
