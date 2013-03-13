@@ -39,12 +39,14 @@ Mesh mesh;
 StreamLines streamLines;
 
 std::auto_ptr<Shader> shaderPhong;
+std::auto_ptr<Shader> shaderLine;
+
 bool leftDown = false, rightDown = false, middleDown = false;
 int lastPos[2];
 float cameraPos[4] = {0,0,2,1};
 Vec3f up, pan;
 int windowWidth = 640, windowHeight = 480;
-bool showSurface = true, showAxes = true, showCurvature = false, showNormals = false;
+bool showSurface = true, showAxes = true, showCurvature = false, showNormals = false, showStreamLines = false;
 
 float specular[] = { 1.0, 1.0, 1.0, 1.0 };
 float shininess[] = { 50.0 };
@@ -195,8 +197,44 @@ void setMeshData(GLuint shaderId, Vec3f* vertices, Vec3f* normals){
     glVertexAttribPointer(position, 3, GL_FLOAT, 0, sizeof(Vec3f), (GLvoid*)vertices);
 }
 
+void drawLines(){
+	unsigned num_vertices = mesh.n_faces()*3;
+	Vec3f *vertices = new Vec3f[num_vertices];
+	Vec3f *normals = new Vec3f[num_vertices];
+	unsigned *indices = new unsigned[num_vertices];
+	size_t index = 0;
 
-void drawTriangles()
+	glUseProgram(shaderLine->programID());
+
+}
+void drawTriangles(){
+	for (Mesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end(); ++f_it) {
+		Mesh::ConstFaceVertexIter cfvIt;
+		cfvIt = mesh.cfv_iter(f_it.handle());
+
+		glBegin(GL_TRIANGLES);
+		//glColor3f(0.1, 0.2, 0.3);
+ 
+		Vec3f pointA = mesh.point(cfvIt.handle());
+		Vec3f nA = mesh.normal(cfvIt.handle());
+		glNormal3d(nA[0], nA[1], nA[2]);
+		glVertex3f(pointA[0], pointA[1], pointA[2]);
+
+		Vec3f pointB = mesh.point((++cfvIt).handle());
+		Vec3f nB = mesh.normal(cfvIt.handle());
+		glNormal3d(nB[0], nB[1], nB[2]);
+		glVertex3f(pointB[0], pointB[1], pointB[2]);
+
+		Vec3f pointC = mesh.point((++cfvIt).handle());
+		Vec3f nC = mesh.normal(cfvIt.handle());
+		glNormal3d(nC[0], nC[1], nC[2]);
+		glVertex3f(pointC[0], pointC[1], pointC[2]);
+
+		glEnd();
+	}
+}
+
+void drawTrianglesShader()
 {
 	unsigned num_vertices = mesh.n_faces()*3;
 	Vec3f *vertices = new Vec3f[num_vertices];
@@ -260,16 +298,26 @@ void renderMesh() {
     glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
     glEnable( GL_POLYGON_OFFSET_FILL );
     glPolygonOffset(1, 1);
-    drawTriangles();
+
+	if(showStreamLines){
+		drawTrianglesShader();
+	}
+	if(!showStreamLines){
+	  drawTriangles();
+	}
+	
+
     glDisable( GL_POLYGON_OFFSET_FILL );
 
     // draw the wireframe
-    /*glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 	glDisable(GL_LIGHTING);
 	glColor3f(0, 0, 0);
-	drawTriangles();
+	if(!showStreamLines){
+		drawTriangles();
+	}
    	glEnable(GL_LIGHTING);
-	*/
+	
 	if (!showSurface) glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 
 	glDisable(GL_LIGHTING);
@@ -280,7 +328,7 @@ void renderMesh() {
 	renderSuggestiveContours(actualCamPos);
 
 	// We'll be nice and provide you with code to render feature edges below
-	/*glBegin(GL_LINES);
+	glBegin(GL_LINES);
 	glColor3f(0,0,0);
 	glLineWidth(5.0f);
 	for (Mesh::ConstEdgeIter it = mesh.edges_begin(); it != mesh.edges_end(); ++it)
@@ -292,9 +340,9 @@ void renderMesh() {
 			glVertex3f(source[0],source[1],source[2]);
 			glVertex3f(target[0],target[1],target[2]);
 		}
-	glEnd();*/
+	glEnd();
 
-	glBegin(GL_QUADS);
+	/*glBegin(GL_QUADS);
 	glColor3f(0,0,0);
 	for (Mesh::ConstEdgeIter it = mesh.edges_begin(); it != mesh.edges_end(); ++it)
 		if (isFeatureEdge(mesh,*it,actualCamPos)) {
@@ -321,7 +369,7 @@ void renderMesh() {
 						glVertex3f(lowerR[0], lowerR[1], lowerR[2]);
 			
 		}
-	glEnd();
+	glEnd();*/
 
 	if (showCurvature) {
 		glBegin(GL_LINES);
@@ -358,9 +406,9 @@ void renderMesh() {
 		}
 		glEnd();
 	}
-
-	streamLines.DrawStreamLines();
-
+	if(showStreamLines){
+		streamLines.DrawStreamLines();
+	}
 	glDepthRange(0,1);
 }
 
@@ -384,7 +432,7 @@ void display() {
 	glViewport(0,0,windowWidth,windowHeight);
 
 	float ratio = (float)windowWidth / (float)windowHeight;
-	gluPerspective(50, ratio, .6, 100); // 50 degree vertical viewing angle, zNear = 1, zFar = 1000
+	gluPerspective(50, ratio, .8, 100); // 50 degree vertical viewing angle, zNear = 1, zFar = 1000
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -452,6 +500,7 @@ void keyboard(unsigned char key, int x, int y) {
 	Vec3f actualCamPos(cameraPos[0]+pan[0],cameraPos[1]+pan[1],cameraPos[2]+pan[2]);
 
 	if (key == 's' || key == 'S') showSurface = !showSurface;
+	else if (key == 'l' || key == 'L') showStreamLines = !showStreamLines;
 	else if (key == 'a' || key == 'A') showAxes = !showAxes;
 	else if (key == 'c' || key == 'C') showCurvature = !showCurvature;
 	else if (key == 'n' || key == 'N') showNormals = !showNormals;
@@ -473,11 +522,17 @@ void loadShaders(){
 		std::cerr << shaderPhong->errors() << std::endl;
 		exit(-1);
 	}
+	shaderLine.reset(new Shader("shaders/line"));
+	if (!shaderLine->loaded()) {
+		std::cerr << "Shader failed to load" << std::endl;
+		std::cerr << shaderLine->errors() << std::endl;
+		exit(-1);
+	}
 }
 
 int main() {
 	int argc = 2;
-	char * argv[] = {"InkRendering", "models/horse.off"}; 
+	char * argv[] = {"InkRendering", "models/homer.off"}; 
 
 	if (argc < 2) {
 		cout << "Usage: " << argv[0] << " mesh_filename\n";
@@ -503,7 +558,7 @@ int main() {
 	cout << '\t' << mesh.n_faces() << " faces.\n";
 
 
-	//simplify(mesh, .05f);
+	// simplify(mesh, .1f);
 
 	mesh.update_normals();
 
